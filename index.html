@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Loon Pond Team Tournament</title>
+    <title>Loon Pond Manager</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -25,10 +25,13 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         @media print {
             .no-print, header, nav, button, .action-row { display: none !important; }
-            body, html { overflow: visible !important; height: auto !important; position: static !important; background: white !important; }
+            html, body { overflow: visible !important; height: auto !important; position: static !important; background: white !important; display: block !important; }
+            main { display: block !important; height: auto !important; overflow: visible !important; position: static !important; }
             .view-section { display: none !important; }
             #view-report { display: block !important; height: auto !important; overflow: visible !important; width: 100% !important; }
-            .report-table th { background: #eee !important; color: #000 !important; border: 1px solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+            .report-table { page-break-inside: auto; }
+            .report-table tr { page-break-inside: avoid; page-break-after: auto; }
+            .report-table th { background: #eee !important; color: #000 !important; border: 1px solid #000; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .report-table td { border: 1px solid #000; }
         }
     </style>
@@ -37,21 +40,22 @@
 
     <header class="bg-slate-900 text-white p-2 flex justify-between items-center shrink-0 no-print">
         <div class="flex items-center gap-2">
-            <h1 class="text-md font-black italic uppercase tracking-tighter text-blue-400">Loon Pond</h1>
+            <h1 class="text-md font-black italic uppercase tracking-tighter text-blue-400">Loon Pond Manager</h1>
             <div id="cloud-status" class="w-2 h-2 rounded-full bg-red-500"></div>
         </div>
-        <button onclick="systemWipe()" class="text-[8px] bg-red-600 px-2 py-1 rounded font-bold uppercase text-white">Hard Reset</button>
+        <div class="flex gap-1">
+            <button id="lock-toggle-btn" onclick="toggleSetupLock()" class="text-[8px] bg-slate-700 px-2 py-1 rounded font-bold uppercase text-white">Lock Setup</button>
+            <button onclick="systemWipe()" class="text-[8px] bg-red-600 px-2 py-1 rounded font-bold uppercase text-white">Hard Reset</button>
+        </div>
     </header>
 
     <nav class="bg-white flex shadow text-[10px] font-bold uppercase border-b shrink-0 no-print">
         <button onclick="goto('setup')" id="tab-setup" class="flex-1 py-4 active-tab">1. Setup</button>
         <button onclick="goto('schedule')" id="tab-schedule" class="flex-1 py-4 border-x">2. Rounds</button>
-        <button onclick="goto('report')" id="tab-report" class="flex-1 py-4 border-r">3. Results</button>
-        <button onclick="goto('leaderboard')" id="tab-leaderboard" class="flex-1 py-4 text-blue-600 font-black italic">4. TV</button>
+        <button onclick="goto('report')" id="tab-report" class="flex-1 py-4">3. Results</button>
     </nav>
 
     <main class="flex-1 relative overflow-hidden">
-        <!-- SETUP -->
         <div id="view-setup" class="view-section active p-4 pb-40">
             <div class="bg-white p-4 rounded-3xl shadow-sm border mb-6">
                 <textarea id="import-area" placeholder="Paste NatStats list..." class="w-full h-20 border rounded-xl p-3 text-[10px] mb-4 bg-slate-50 outline-none"></textarea>
@@ -62,7 +66,7 @@
                 </div>
                 <div class="flex items-center gap-2 mb-6 bg-slate-50 p-3 rounded-xl border">
                     <input type="checkbox" id="handicap-toggle" onchange="state.useHandicap=this.checked;persist()" class="w-5 h-5">
-                    <label for="handicap-toggle" class="text-xs font-black uppercase">Use Handicaps</label>
+                    <label for="handicap-toggle" class="text-xs font-black uppercase ml-1">Use Handicaps</label>
                 </div>
                 <div id="setup-list" class="grid grid-cols-1 gap-4"></div>
                 <div class="flex justify-center mt-6 gap-4">
@@ -83,42 +87,34 @@
         <div id="view-report" class="view-section p-4 bg-white">
             <div class="action-row flex gap-2 mb-4 no-print">
                 <button onclick="exportCSV()" class="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold text-[10px] uppercase">Export CSV</button>
-                <button onclick="window.print()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-[10px] uppercase">Print Report</button>
+                <button onclick="window.print()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-[10px] uppercase">Print Results</button>
             </div>
             <div id="report-output"></div>
         </div>
-
-        <!-- TV DISPLAY -->
-        <div id="view-leaderboard" class="view-section h-full p-0 overflow-hidden bg-slate-950">
-            <div class="flex flex-col h-full" id="fullscreen-target-lb">
-                <div class="p-6 flex justify-between items-center border-b border-white/10 text-white"><h2 class="text-3xl font-black italic uppercase tracking-tighter">Standings</h2><button onclick="toggleFS('fullscreen-target-lb')" class="text-white/30 text-[10px] uppercase font-bold no-print">Full Screen</button></div>
-                <div class="flex px-4 py-2 bg-white/5 text-[9px] font-black uppercase text-slate-500 tracking-widest"><div class="w-[10%]">#</div><div class="w-[45%]">Team</div><div class="w-[15%] text-center">W-L</div><div class="w-[15%] text-center">Pts</div><div class="w-[15%] text-right">%</div></div>
-                <div id="lb-rows" class="flex-1 overflow-y-auto no-scrollbar"></div>
-                <div class="bg-blue-600 p-4 h-24 flex items-center shrink-0 text-white"><div id="ticker-content" class="w-full text-white"></div></div>
-            </div>
-        </div>
     </main>
 
-    <!-- SCORER (With Auto-Scroll and Multi-Scoring Nav) -->
+    <!-- SCORER VIEW -->
     <div id="view-scorer" class="hidden fixed inset-0 bg-white z-[500] flex flex-col h-screen w-screen overflow-hidden no-print">
         <header class="bg-slate-900 text-white p-2 flex justify-between items-center shrink-0 border-b border-slate-800">
             <button onclick="exitScorer()" class="text-[9px] font-black bg-slate-800 px-3 py-1.5 rounded uppercase">Exit</button>
             <div id="sc-title" class="text-[8px] font-black uppercase text-blue-400 text-center truncate"></div>
-            <button id="sc-print-btn" onclick="printMatchCard()" class="text-[9px] font-black bg-blue-600 px-3 py-1.5 rounded uppercase shadow-lg opacity-30 pointer-events-none">Print Card</button>
+            <button id="sc-print-btn" onclick="printMatchCard()" class="text-[9px] font-black bg-blue-600 px-3 py-1.5 rounded uppercase shadow-lg transition-opacity">Print Card</button>
         </header>
         <div id="court-tabs-container" class="bg-slate-800 flex text-white text-[9px] font-black uppercase shrink-0"></div>
         <div class="flex-1 flex flex-col bg-white overflow-hidden">
-            <div class="h-[24%] flex items-center border-b shadow-inner shrink-0">
-                <div id="p1-zone" onclick="nav.activePlayer=0;renderScorerUI()" class="w-1/2 h-full flex flex-col items-center justify-center border-r transition-all px-2">
-                    <p id="sc-p1-n" class="text-xl font-black text-slate-700 uppercase truncate text-center w-full"></p>
+            <div class="h-[28%] flex items-center border-b shadow-inner shrink-0">
+                <div id="p1-zone" onclick="nav.activePlayer=0;renderScorerUI()" class="w-1/2 h-full flex flex-col items-center justify-center border-r transition-all px-2 relative">
+                    <p id="sc-p1-n" class="text-lg font-black text-slate-700 uppercase truncate text-center w-full"></p>
                     <p id="sc-p1-s" class="text-8xl font-black text-blue-600 leading-none">0</p>
+                    <p id="sc-p1-rgrs" class="text-sm font-bold text-blue-400 uppercase mt-1 tracking-widest">0 Rgrs</p>
                 </div>
-                <div id="p2-zone" onclick="nav.activePlayer=1;renderScorerUI()" class="w-1/2 h-full flex flex-col items-center justify-center transition-all px-2 text-center">
-                    <p id="sc-p2-n" class="text-xl font-black text-slate-700 uppercase truncate text-center w-full"></p>
+                <div id="p2-zone" onclick="nav.activePlayer=1;renderScorerUI()" class="w-1/2 h-full flex flex-col items-center justify-center transition-all px-2 text-center relative">
+                    <p id="sc-p2-n" class="text-lg font-black text-slate-700 uppercase truncate text-center w-full"></p>
                     <p id="sc-p2-s" class="text-8xl font-black text-red-600 leading-none tabular-nums">0</p>
+                    <p id="sc-p2-rgrs" class="text-sm font-bold text-red-400 uppercase mt-1 tracking-widest">0 Rgrs</p>
                 </div>
             </div>
-            <div id="sc-history-scroll" class="h-[12%] bg-slate-50 border-b flex items-center px-2 overflow-x-auto no-scrollbar border-dashed shrink-0">
+            <div id="sc-history-scroll" class="h-[10%] bg-slate-50 border-b flex items-center px-2 overflow-x-auto no-scrollbar border-dashed shrink-0">
                 <div id="sc-history" class="flex gap-2 h-full items-center"></div>
             </div>
             <div class="flex-1 p-2 bg-slate-200 flex flex-col overflow-hidden">
@@ -139,136 +135,45 @@
     <div id="modal-lineup" class="hidden fixed inset-0 bg-slate-900/95 z-[9999] flex items-center justify-center p-4"><div class="bg-white rounded-3xl p-5 w-full max-w-sm"><h2 class="text-xl font-black text-blue-600 uppercase italic mb-6 text-center border-b pb-2">Assign Lineup</h2><div id="lineup-form" class="space-y-4"></div><button onclick="saveLineupAndGo()" class="w-full mt-8 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase">Start Scoring</button></div></div>
 
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyC66Kkum1zo-tXtdFDDzjTRryYQODXbfkA",
-            authDomain: "loonpond-4f41b.firebaseapp.com",
-            databaseURL: "https://loonpond-4f41b-default-rtdb.firebaseio.com",
-            projectId: "loonpond-4f41b",
-            storageBucket: "loonpond-4f41b.firebasestorage.app",
-            messagingSenderId: "285450331741",
-            appId: "1:285450331741:web:0ef3d97f1d4149784ecfb4",
-            measurementId: "G-V09W2KSXEK"
-        };
+        const firebaseConfig = { apiKey: "AIzaSyC66Kkum1zo-tXtdFDDzjTRryYQODXbfkA", authDomain: "loonpond-4f41b.firebaseapp.com", databaseURL: "https://loonpond-4f41b-default-rtdb.firebaseio.com", projectId: "loonpond-4f41b", storageBucket: "loonpond-4f41b.firebasestorage.app", messagingSenderId: "285450331741", appId: "1:285450331741:web:0ef3d97f1d4149784ecfb4", measurementId: "G-V09W2KSXEK" };
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        const dbRef = db.ref("loonpond_live_v11");
+        const dbRef = firebase.database().ref("loonpond_live_v11");
 
-        // Guideline Colors: Group 1-6
         const guidelCol = ["#4ade80", "#fb923c", "#f87171", "#facc15", "#ffffff", "#f472b6"];
-
-        let state = { sanction:"", date:"", useHandicap: false, teams:[], games:{} , matchups:[] };
-        let nav = { rdIdx: 0, activeMatchKey: null, activeMatchIdx: 0, activeCourtIdx: 0, activePlayer: 0 };
-        let tickerIdx = 0;
+        let state = { sanction:"", date:"", useHandicap: false, teams:[], games:{} , matchups:[], setupLocked: false };
+        let nav = { rdIdx: 0, activeMatchKey: null, activeMatchIdx: 0, activeCourtIdx: 0, activePlayer: 0, currentView: 'setup' };
 
         function persist() { dbRef.set(state); }
         function formatName(n) { if(!n) return ""; const p = n.trim().split(/\s+/); return p.length < 2 ? n : `${p[0]} ${p[p.length-1].charAt(0).toUpperCase()}.`; }
         const fmtDec = (v) => v % 1 === 0 ? v : v.toFixed(1);
-        const fmtDate = (dStr) => { if(!dStr) return "Date TBD"; const [y, m, d] = dStr.split('-'); return `${m}/${d}/${y}`; }
+        const fmtDate = (dStr) => { if(!dStr) return ""; const [y, m, d] = dStr.split('-'); return `${m}/${d}/${y}`; }
 
         dbRef.on("value", (snap) => {
-            const data = snap.val();
-            if(data) { 
-                state = data; 
-                if(state.date) document.getElementById('date-input').value = state.date;
-                if(state.sanction) document.getElementById('sanction-input').value = state.sanction;
-                renderUI(); 
-            }
+            const data = snap.val(); if(data) { state = data; renderUI(); }
             document.getElementById('cloud-status').className = "w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_green]";
         });
 
         function renderUI() {
-            renderSetup(); renderSchedule(); renderOfficialReport(); renderLeaderboard();
+            const tabSetup = document.getElementById('tab-setup'); const lockBtn = document.getElementById('lock-toggle-btn');
+            if(state.setupLocked) { tabSetup.style.display='none'; lockBtn.innerText="Unlock Setup"; lockBtn.className="text-[8px] bg-green-600 px-2 py-1 rounded font-bold uppercase"; if(nav.currentView==='setup') goto('schedule'); } 
+            else { tabSetup.style.display='block'; lockBtn.innerText="Lock Setup"; lockBtn.className="text-[8px] bg-slate-700 px-2 py-1 rounded font-bold uppercase"; }
+            renderSetup(); renderSchedule(); renderOfficialReport(); 
             if(!document.getElementById('view-scorer').classList.contains('hidden')) renderScorerUI();
         }
 
-        function modifyTeams(n) {
-            if(!state.teams) state.teams = [];
-            const count = Math.max(2, state.teams.length + n);
-            while(state.teams.length < count) {
-                state.teams.push({ name: `TEAM ${state.teams.length+1}`, players: Array.from({length:3},(_,j)=>({name:`P-${j+1}`, avg:0, card:'', hdcp:0})) });
-            }
-            while(state.teams.length > count) state.teams.pop();
-            persist();
-        }
-
-        function parseImport() {
-            const input = document.getElementById('import-area').value;
-            const matches = input.match(/\d+\.\s+(.*?)\s+([\d\.]+)\s+(\d+)\s+([0-9\*]+)/g);
-            if(!matches) return alert("Select lines from NatStats correctly.");
-            state.teams = [];
-            let pData = matches.map(l => {
-                const parts = l.match(/\d+\.\s+(.*?)\s+([\d\.]+)\s+(\d+)\s+([0-9\*]+)/);
-                return { name: parts[1].trim(), avg: parseFloat(parts[2]), hdcp: parseInt(parts[3]), card: parts[4].replace('*','') };
-            });
-            for(let i=0; i<pData.length; i+=3) {
-                const chunk = pData.slice(i, i+3);
-                if(chunk.length === 3) state.teams.push({ name: chunk.map(p => p.name.split(' ')[0]).join(', ').toUpperCase(), players: chunk });
-            }
-            persist();
-        }
-
-        function renderSetup() {
-            document.getElementById('count-label').innerText = state.teams?.length || 0;
-            if(!state.teams) return;
-            document.getElementById('setup-list').innerHTML = state.teams.map((t, ti) => `
-                <div class="bg-white p-4 rounded-3xl border shadow-sm">
-                    <input type="text" value="${t.name}" onchange="state.teams[${ti}].name=this.value.toUpperCase();persist()" class="font-black border-b w-full mb-3 text-sm outline-none">
-                    <div class="grid grid-cols-1 gap-2">${t.players.map((p, pi) => `<div class="flex gap-1"><input type="text" value="${p.name}" onchange="state.teams[${ti}].players[${pi}].name=this.value;persist()" class="flex-1 text-[10px] border p-2 rounded-xl"><input type="number" step="0.01" value="${p.avg}" onchange="state.teams[${ti}].players[${pi}].avg=parseFloat(this.value);persist()" class="w-14 text-[10px] border p-2 rounded-xl text-center"><input type="text" value="${p.card}" placeholder="#" onchange="state.teams[${ti}].players[${pi}].card=this.value;persist()" class="w-16 text-[10px] border p-2 rounded-xl text-center"></div>`).join('')}</div>
-                </div>`).join('');
-        }
-
-        function buildTournament() {
-            const n = state.teams.length; if(n<2) return alert("Add teams.");
-            let ids = Array.from({length:n}, (_,i)=>i); if(n%2!==0) { ids.push(-1); }
-            let base = [];
-            for(let r=0; r < ids.length-1; r++) {
-                let m = []; for(let i=0; i < ids.length/2; i++) if(ids[i]!==-1 && ids[ids.length-1-i]!==-1) m.push([ids[i], ids[ids.length-1-i]]);
-                base.push(m); ids.splice(1, 0, ids.pop());
-            }
-            state.matchups = state.teams.length < 6 ? [...base, ...base.map(rd=>rd.map(m=>[m[1],m[0]]))] : base;
-            state.games = {}; persist(); goto('schedule');
-        }
-
-        function renderSchedule() {
-            if(!state.matchups || !state.matchups[nav.rdIdx]) return;
-            document.getElementById('rd-nav').innerHTML = state.matchups.map((_, i) => `<button onclick="nav.rdIdx=${i};renderSchedule()" class="shrink-0 px-5 py-2 rounded-full text-[10px] font-black border ${nav.rdIdx===i?'bg-slate-900 text-white':'bg-white text-slate-400'}">RD ${i+1}</button>`).join('');
-            document.getElementById('match-list').innerHTML = state.matchups[nav.rdIdx].map((m, mi) => {
-                const key = nav.rdIdx + "-" + mi;
-                const done = state.games?.[key]?.matches?.every(g => g.s >= 40);
-                const guidColor = guidelCol[mi % guidelCol.length];
-                return `<div class="bg-white p-5 rounded-3xl border flex justify-between items-center shadow-sm" style="border-left: 10px solid ${guidColor}">
-                    <div><p class="text-[8px] font-black text-blue-500 uppercase leading-tight">Courts ${(mi*3)+1}-${(mi*3)+3}</p><p class="text-sm font-black mt-1">${state.teams[m[0]].name} vs ${state.teams[m[1]].name}</p></div>
-                    <button onclick="openLineup(${nav.rdIdx},${mi})" class="${done?'bg-green-600':'bg-blue-600'} text-white text-[10px] px-6 py-3 rounded-2xl font-black">SCORE</button>
-                </div>`;
-            }).join('');
-        }
-
-        function openLineup(r, m) {
-            nav.activeMatchKey = r + "-" + m; nav.activeMatchIdx = m;
-            if(state.games && state.games[nav.activeMatchKey]) return startScorer();
-            const t1 = state.teams[state.matchups[r][m][0]], t2 = state.teams[state.matchups[r][m][1]];
-            document.getElementById('modal-lineup').classList.remove('hidden');
-            document.getElementById('lineup-form').innerHTML = [0,1,2].map(i => `<div class="flex gap-2"><select id="lA-${i}" class="flex-1 border p-3 rounded-xl text-[10px] font-bold">${t1.players.map((p,pi)=>`<option value="${pi}" ${pi===i?'selected':''}>${p.name}</option>`).join('')}</select><select id="lB-${i}" class="flex-1 border p-3 rounded-xl text-[10px] font-bold">${t2.players.map((p,pi)=>`<option value="${pi}" ${pi===i?'selected':''}>${p.name}</option>`).join('')}</select></div>`).join('');
-        }
-
-        function saveLineupAndGo() {
-            let lA = [0,1,2].map(i=>parseInt(document.getElementById('lA-'+i).value));
-            let lB = [0,1,2].map(i=>parseInt(document.getElementById('lB-'+i).value));
-            const [r, m] = nav.activeMatchKey.split('-').map(Number);
-            const t1 = state.teams[state.matchups[r][m][0]], t2 = state.teams[state.matchups[r][m][1]];
-            if(!state.games) state.games = {};
-            state.games[nav.activeMatchKey] = { lineup: lA.map((a,i)=>[a, lB[i]]), matches: Array.from({length:3},(v, i) => {
-                let h1 = state.useHandicap ? t1.players[a].hdcp : 0, h2 = state.useHandicap ? t2.players[lB[i]].hdcp : 0;
-                return {p1:h1, p2:h2, r1:0, r2:0, s:0, h:[]};
-            })};
-            document.getElementById('modal-lineup').classList.add('hidden'); persist(); startScorer();
-        }
-
+        function toggleSetupLock() { state.setupLocked = !state.setupLocked; persist(); }
+        function modifyTeams(n) { if(!state.teams) state.teams = []; const count = Math.max(2, state.teams.length + n); while(state.teams.length < count) { state.teams.push({ name: `TEAM ${state.teams.length+1}`, players: Array.from({length:3},(_,j)=>({name:`P-${j+1}`, avg:0, card:'', hdcp:0})) }); } while(state.teams.length > count) state.teams.pop(); persist(); }
+        function parseImport() { const input = document.getElementById('import-area').value; const matches = input.match(/\d+\.\s+(.*?)\s+([\d\.]+)\s+(\d+)\s+([0-9\*]+)/g); if(!matches) return alert("Paste NatStats rows."); state.teams = []; let pData = matches.map(l => { const parts = l.match(/\d+\.\s+(.*?)\s+([\d\.]+)\s+(\d+)\s+([0-9\*]+)/); return { name: parts[1].trim(), avg: parseFloat(parts[2]), hdcp: parseInt(parts[3]), card: parts[4].replace('*','') }; }); for(let i=0; i<pData.length; i+=3) { const chunk = pData.slice(i, i+3); if(chunk.length === 3) state.teams.push({ name: chunk.map(p => p.name.split(' ')[0]).join(', ').toUpperCase(), players: chunk }); } persist(); }
+        function renderSetup() { document.getElementById('count-label').innerText = state.teams?.length || 0; if(!state.teams) return; document.getElementById('setup-list').innerHTML = state.teams.map((t, ti) => `<div class="bg-white p-4 rounded-3xl border shadow-sm"><input type="text" value="${t.name}" onchange="state.teams[${ti}].name=this.value.toUpperCase();persist()" class="font-black border-b w-full mb-3 text-sm outline-none"><div class="grid grid-cols-1 gap-2">${t.players.map((p, pi) => `<div class="flex gap-1"><input type="text" value="${p.name}" onchange="state.teams[${ti}].players[${pi}].name=this.value;persist()" class="flex-1 text-[10px] border p-2 rounded-xl"><input type="number" step="0.01" value="${p.avg}" onchange="state.teams[${ti}].players[${pi}].avg=parseFloat(this.value);persist()" class="w-14 text-[10px] border p-2 rounded-xl text-center"><input type="text" value="${p.card}" placeholder="#" onchange="state.teams[${ti}].players[${pi}].card=this.value;persist()" class="w-16 text-[10px] border p-2 rounded-xl text-center"></div>`).join('')}</div></div>`).join(''); }
+        function buildTournament() { const n = state.teams.length; if(n<2) return alert("Add teams."); let ids = Array.from({length:n}, (_,i)=>i); if(n%2!==0) { ids.push(-1); } let base = []; for(let r=0; r < ids.length-1; r++) { let m = []; for(let i=0; i < ids.length/2; i++) if(ids[i]!==-1 && ids[ids.length-1-i]!==-1) m.push([ids[i], ids[ids.length-1-i]]); base.push(m); ids.splice(1, 0, ids.pop()); } state.matchups = state.teams.length < 6 ? [...base, ...base.map(rd=>rd.map(m=>[m[1],m[0]]))] : base; state.games = {}; persist(); goto('schedule'); }
+        function renderSchedule() { if(!state.matchups || !state.matchups[nav.rdIdx]) return; document.getElementById('rd-nav').innerHTML = state.matchups.map((_, i) => `<button onclick="nav.rdIdx=${i};renderSchedule()" class="shrink-0 px-5 py-2 rounded-full text-[10px] font-black border ${nav.rdIdx===i?'bg-slate-900 text-white':'bg-white text-slate-400'}">RD ${i+1}</button>`).join(''); document.getElementById('match-list').innerHTML = state.matchups[nav.rdIdx].map((m, mi) => { const key = nav.rdIdx + "-" + mi; const done = state.games?.[key]?.matches?.every(g => g.s >= 40); const col = guidelCol[mi % guidelCol.length]; return `<div class="bg-white p-5 rounded-3xl border flex justify-between items-center shadow-sm" style="border-left: 10px solid ${col}"><div><p class="text-[8px] font-black text-blue-500 uppercase">Courts ${(mi*3)+1}-${(mi*3)+3}</p><p class="text-sm font-black mt-1">${state.teams[m[0]].name} vs ${state.teams[m[1]].name}</p></div><button onclick="openLineup(${nav.rdIdx},${mi})" class="${done?'bg-green-600':'bg-blue-600'} text-white text-[10px] px-6 py-3 rounded-2xl font-black">SCORE</button></div>`; }).join(''); }
+        function openLineup(r, m) { nav.activeMatchKey = r + "-" + m; nav.activeMatchIdx = m; if(state.games && state.games[nav.activeMatchKey]) return startScorer(); const t1 = state.teams[state.matchups[r][m][0]], t2 = state.teams[state.matchups[r][m][1]]; document.getElementById('modal-lineup').classList.remove('hidden'); document.getElementById('lineup-form').innerHTML = [0,1,2].map(i => `<div class="flex gap-2"><select id="lA-${i}" class="flex-1 border p-3 rounded-xl text-[10px] font-bold">${t1.players.map((p,pi)=>`<option value="${pi}" ${pi===i?'selected':''}>${p.name}</option>`).join('')}</select><select id="lB-${i}" class="flex-1 border p-3 rounded-xl text-[10px] font-bold">${t2.players.map((p,pi)=>`<option value="${pi}" ${pi===i?'selected':''}>${p.name}</option>`).join('')}</select></div>`).join(''); }
+        function saveLineupAndGo() { let lA = [0,1,2].map(i=>parseInt(document.getElementById('lA-'+i).value)); let lB = [0,1,2].map(i=>parseInt(document.getElementById('lB-'+i).value)); const [r, m] = nav.activeMatchKey.split('-').map(Number); const t1 = state.teams[state.matchups[r][m][0]], t2 = state.teams[state.matchups[r][m][1]]; if(!state.games) state.games = {}; state.games[nav.activeMatchKey] = { lineup: lA.map((a,i)=>[a, lB[i]]), matches: Array.from({length:3},(v, i) => { return {p1:state.useHandicap?t1.players[lA[i]].hdcp:0, p2:state.useHandicap?t2.players[lB[i]].hdcp:0, r1:0, r2:0, s:0, h:[]}; }) }; document.getElementById('modal-lineup').classList.add('hidden'); persist(); startScorer(); }
+        
         function startScorer() { 
             const sc = document.getElementById('view-scorer'); sc.classList.remove('hidden');
             const fs = sc.requestFullscreen || sc.webkitRequestFullscreen || sc.msRequestFullscreen;
-            if(fs) fs.call(sc).catch(()=>{});
-            renderScorerUI(); 
+            if(fs) fs.call(sc).catch(()=>{}); renderScorerUI(); 
         }
         function exitScorer() { if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); document.getElementById('view-scorer').classList.add('hidden'); renderSchedule(); }
 
@@ -282,15 +187,17 @@
             document.getElementById('sc-p1-n').innerText = formatName(t1.players[md.lineup[nav.activeCourtIdx][0]].name);
             document.getElementById('sc-p2-n').innerText = formatName(t2.players[md.lineup[nav.activeCourtIdx][1]].name);
             document.getElementById('sc-p1-s').innerText = g.p1; document.getElementById('sc-p2-s').innerText = g.p2;
+            document.getElementById('sc-p1-rgrs').innerText = (g.r1 || 0) + " Rgrs";
+            document.getElementById('sc-p2-rgrs').innerText = (g.r2 || 0) + " Rgrs";
             document.getElementById('court-tabs-container').innerHTML = [0,1,2].map(i => `<button onclick="nav.activeCourtIdx=${i};renderScorerUI()" class="flex-1 py-3 border-b-4 ${nav.activeCourtIdx===i?'border-blue-500 bg-slate-700':'border-transparent'}">Court ${cb+i}</button>`).join('');
             document.getElementById('sc-history').innerHTML = (g.h || []).map((h, i) => `<div class="shrink-0 px-4 border-r flex flex-col items-center leading-none"><span class="text-[8px] opacity-30">#${(i+1)*2}</span><span class="symbols text-blue-600 text-[18px]">${h.s1}</span><span class="text-[10px] h-3 font-black text-blue-600">${h.pts1||''}</span><span class="text-[10px] h-3 font-black text-red-600">${h.pts2||''}</span><span class="symbols text-red-600 text-[18px]">${h.s2}</span></div>`).join('');
             const btn = document.getElementById('sc-print-btn');
-            if(g.s >= 40) { document.getElementById('sc-shoe-label').innerText = "COMPLETE"; btn.classList.remove('opacity-30', 'pointer-events-none'); }
-            else { document.getElementById('sc-shoe-label').innerText = `${g.s}/40 SHOES`; btn.classList.add('opacity-30', 'pointer-events-none'); }
+            if(g.s >= 40) { document.getElementById('sc-shoe-label').innerText = "COMPLETE"; btn.classList.remove('opacity-30'); }
+            else { document.getElementById('sc-shoe-label').innerText = `${g.s}/40 SHOES`; btn.classList.add('opacity-30'); }
             const sEl = document.getElementById('sc-history-scroll'); if(sEl) sEl.scrollTo({left: sEl.scrollWidth, behavior: 'smooth'});
         }
 
-        function eCommit(code) {
+        function eCommit(code) { 
             const md = state.games?.[nav.activeMatchKey]; if(!md) return;
             const g = md.matches[nav.activeCourtIdx]; if(g.s >= 40) return;
             const [p, rgr, oR] = code.split('_').map(Number);
@@ -300,77 +207,53 @@
             g.p1+=p1p; g.p2+=p2p; g.r1+=r1; g.r2+=r2; g.s+=2;
             if(!g.h) g.h = [];
             g.h.push({ s1:sym(r1, r2), s2:sym(r2, r1), pts1:p1p, pts2:p2p, r1, r2 });
-            persist();
+            persist(); renderScorerUI();
         }
 
-        function undoFrame() { const g = state.games[nav.activeMatchKey].matches[nav.activeCourtIdx]; if(!g.h?.length) return; const l = g.h.pop(); g.p1-=l.pts1; g.p2-=l.pts2; g.r1-=l.r1; g.r2-=l.r2; g.s-=2; persist(); }
+        function undoFrame() { const g = state.games[nav.activeMatchKey].matches[nav.activeCourtIdx]; if(!g.h?.length) return; const l = g.h.pop(); g.p1-=l.pts1; g.p2-=l.pts2; g.r1-=l.r1; g.r2-=l.r2; g.s-=2; persist(); renderScorerUI(); }
 
-        // PRINT SCORE SHEET
         function printMatchCard() {
             const md = state.games[nav.activeMatchKey], parts = nav.activeMatchKey.split('-'), g = md.matches[nav.activeCourtIdx];
-            const t1 = state.teams[state.matchups[parts[0]][parts[1]][0]], t2 = state.teams[state.matchups[parts[0]][parts[1]][1]];
-            const p1 = t1.players[md.lineup[nav.activeCourtIdx][0]], p2 = t2.players[md.lineup[nav.activeCourtIdx][1]], ct = (nav.activeMatchIdx * 3) + 1 + nav.activeCourtIdx;
-            let p1Run = 0, p2Run = 0; const fmt = (v) => v === 0 ? "-" : v;
-            let h = `<html><head><style>body{margin:20px;font-family:sans-serif;}.header{text-align:center;border-bottom:3px double #000;padding-bottom:10px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #000;padding:6px;text-align:center;font-family:monospace;}th{background:#eee;}.name-row th{font-size:20px;text-transform:uppercase;font-family:sans-serif;}</style></head><body><div class="header"><h1>Loon Pond Team Tournament</h1><p>Date: ${fmtDate(state.date)} | RD: ${nav.rdIdx+1} | Court: ${ct}</p></div><table><thead><tr class="name-row"><th colspan="3">${p1.name}</th><th style="width:40px;">VS</th><th colspan="3">${p2.name}</th></tr><tr><th>Rgr</th><th>Pts</th><th>Score</th><th style="background:#ccc">SHOE</th><th>Rgr</th><th>Pts</th><th>Score</th></tr></thead><tbody>`;
-            for(let i=0; i<20; i++){ const f=g.h[i]||{s1:'-',s2:'-',pts1:0,pts2:0}; p1Run+=f.pts1; p2Run+=f.pts2; h+=`<tr><td>${f.s1}</td><td>${fmt(f.pts1)}</td><td style="background:#fcfcfc;">${fmt(p1Run)}</td><td style="background:#eee;font-weight:bold;">${(i+1)*2}</td><td>${f.s2}</td><td>${fmt(f.pts2)}</td><td style="background:#fcfcfc;">${fmt(p2Run)}</td></tr>`; }
-            h += `<tr style="font-weight:bold;background:#eee"><td>${g.r1}</td><td colspan="2">FINAL: ${g.p1}</td><td>40</td><td>${g.r2}</td><td colspan="2">FINAL: ${g.p2}</td></tr></tbody></table></body></html>`;
+            const t1 = state.teams[state.matchups[parts[0]][parts[1]][0]], t2 = state.teams[state.matchups[parts[0]][parts[1]][1]], p1 = t1.players[md.lineup[nav.activeCourtIdx][0]], p2 = t2.players[md.lineup[nav.activeCourtIdx][1]], ct = (nav.activeMatchIdx * 3) + 1 + nav.activeCourtIdx;
+            let p1Run = 0, p2Run = 0; const fts = (v) => v === 0 ? "-" : v;
+            let h = `<html><head><style>@media print{-webkit-print-color-adjust:exact;} body{font-family:sans-serif;} .header{text-align:center; border-bottom:3px double #000; padding:10px;} table{width:100%; border-collapse:collapse; table-layout:fixed;} th,td{border:1px solid #000; padding:6px; text-align:center; font-family:monospace;} .n th{font-size:24px; font-family:sans-serif;} .r th{background:#eee; font-weight:bold;}</style></head><body><div class="header"><h1>Loon Pond Tournament</h1><p>Date: ${fmtDate(state.date)} | RD: ${nav.rdIdx+1} | Court: ${ct}</p></div><table><thead><tr class="n"><th colspan="3">${p1.name}</th><th style="width:40px">VS</th><th colspan="3">${p2.name}</th></tr><tr class="r"><th>Rgr</th><th>Pts</th><th>Score</th><th style="background:#ccc">SHOE</th><th>Rgr</th><th>Pts</th><th>Score</th></tr></thead><tbody>`;
+            for(let i=0; i<20; i++){ const f=g.h[i]||{s1:'-',s2:'-',pts1:0,pts2:0}; p1Run+=f.pts1; p2Run+=f.pts2; h+=`<tr><td style="font-weight:bold">${f.s1}</td><td>${fts(f.pts1)}</td><td style="background:#fcfcfc">${fts(p1Run)}</td><td style="background:#eee;font-weight:bold">${(i+1)*2}</td><td style="font-weight:bold">${f.s2}</td><td>${fts(f.pts2)}</td><td style="background:#fcfcfc">${fts(p2Run)}</td></tr>`; }
+            h += `<tr style="font-weight:bold; background:#eee"><td>${g.r1}</td><td colspan="2">FINAL: ${g.p1}</td><td>40</td><td>${g.r2}</td><td colspan="2">FINAL: ${g.p2}</td></tr></tbody></table></body></html>`;
             const win = window.open('','','height=800,width=800'); win.document.write(h); win.document.close(); win.print();
         }
 
-        // --- PRINT SCHEDULE (FORCING COLOR) ---
         function printScheduleGrid() {
-            if(!state.matchups || !state.matchups.length) return;
-            const maxM = Math.max(...state.matchups.map(rd=>rd.length));
-            let h = `<html><head><style>
-                @media print { td, th { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
-                th, td { border: 2px solid #000; padding: 12px; text-align: center; font-family: sans-serif; font-weight: bold; font-size: 14px; }
-                th { background: #0f172a; color: white; }
-                .rd-col { background: #eee; width: 60px; font-size: 20px; }
-            </style></head><body><h1 style="text-align:center;">Loon Pond Tournament Grid</h1><table><thead><tr><th style="width:70px">RD</th>`;
+            if(!state.matchups?.length) return; const maxM = Math.max(...state.matchups.map(rd=>rd.length));
+            let h = `<html><head><style>@media print { td, th { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } } table { width: 100%; border-collapse: collapse; } th, td { border: 2px solid #000; padding: 12px; text-align: center; font-family: sans-serif; font-weight: bold; } th { background: #0f172a; color: white; } </style></head><body><h1 style="text-align:center;">Schedule Grid</h1><table><thead><tr><th style="width:70px">RD</th>`;
             for(let i=0;i<maxM;i++) h+=`<th>COURTS ${(i*3)+1}-${(i*3)+3}</th>`;
-            h += `</tr></thead><tbody>`;
-            state.matchups.forEach((rd,ri)=>{ h+=`<tr><td class="rd-col">RD ${ri+1}</td>`;
-                for(let mi=0;mi<maxM;mi++){ 
-                    if(rd[mi]){ 
-                        h+=`<td style="background:${guidelCol[mi%guidelCol.length]}">${state.teams[rd[mi][0]].name}<br><small>vs</small><br>${state.teams[rd[mi][1]].name}</td>`;
-                    } else h+=`<td>-</td>`;
-                }
-                h += `</tr>`;
-            }); 
-            const win = window.open('','','width=1000,height=800'); 
-            win.document.write(h+'</tbody></table></body></html>'); win.document.close(); win.print();
-        }
-
-        function calcStats() {
-            if(!state.teams) return [];
-            let s = state.teams.map(t=>({n:t.name, w:0, l:0, pts:0, rng:0, sh:0}));
-            Object.keys(state.games || {}).forEach(k => {
-                const parts = k.split('-').map(Number), ti = state.matchups[parts[0]][parts[1]];
-                state.games[k].matches.forEach(g => {
-                    s[ti[0]].pts+=g.p1; s[ti[0]].rng+=g.r1; s[ti[0]].sh+=g.s; s[ti[1]].pts+=g.p2; s[ti[1]].rng+=g.r2; s[ti[1]].sh+=g.s;
-                    if(g.s>=40) { if(g.p1>g.p2) {s[ti[0]].w++; s[ti[1]].l++;} else if(g.p2>g.p1) {s[ti[1]].w++; s[ti[0]].l++;} else {s[ti[0]].w+=.5; s[ti[0]].l+=.5; s[ti[1]].w+=.5; s[ti[1]].l+=.5;}}
-                });
-            }); return s;
+            h += `<tr>`; state.matchups.forEach((rd,ri)=>{ h+=`<tr><td style="background:#eee; font-size:20px">RD ${ri+1}</td>`;
+                for(let mi=0;mi<maxM;mi++){ if(rd[mi]){ h+=`<td style="background:${guidelCol[mi%guidelCol.length]}">${state.teams[rd[mi][0]].name}<br><small>vs</small><br>${state.teams[rd[mi][1]].name}</td>`;} else h+=`<td>-</td>`;} h += `</tr>`;
+            }); win = window.open('','','width=1000,height=800'); win.document.write(h+'</table></body></html>'); win.document.close(); win.print();
         }
 
         function exportCSV() {
+            const sanc = state.sanction || "NoSanction"; const dt = fmtDate(state.date);
             let csv = "sanction #,date of tournament,nhpa#,ringers,shoes,last name,first name\n";
-            state.teams.forEach(team => team.players.forEach(p => {
-                let ps = {r:0, sh:0}; Object.keys(state.games || {}).forEach(k => {
-                    const sub = state.matchups[k.split("-")[0]][k.split("-")[1]].indexOf(state.teams.indexOf(team));
-                    if(sub !== -1) state.games[k].lineup.forEach((pair, gi) => { if(team.players[sub===0?pair[0]:pair[1]].name===p.name) {
-                        const g = state.games[k].matches[gi]; ps.r += (sub===0 ? g.r1 : g.r2); ps.sh += g.s;
-                    } });
+            state.teams.forEach((team, teamIdx) => team.players.forEach((p, pIdx) => {
+                let tr = 0, ts = 0; 
+                Object.keys(state.games || {}).forEach(k => {
+                    const gameData = state.games[k]; const ptsArr = k.split("-").map(Number);
+                    const subIdx = state.matchups[ptsArr[0]][ptsArr[1]].indexOf(teamIdx);
+                    if(subIdx !== -1) gameData.lineup.forEach((pair, gi) => {
+                        if((subIdx === 0 ? pair[0] : pair[1]) === pIdx) {
+                            tr += (subIdx === 0 ? gameData.matches[gi].r1 : gameData.matches[gi].r2);
+                            ts += gameData.matches[gi].s;
+                        }
+                    });
                 });
                 const names = p.name.trim().split(/\s+/);
-                csv += `"${state.sanction}","${fmtDate(state.date)}","${p.card}",${ps.r},${ps.sh},"${names.slice(1).join(' ')}","${names[0]}"\n`;
+                csv += `"${sanc}","${dt}","${p.card || ""}",${tr},${ts},"${names.slice(1).join(' ')}","${names[0]}"\n`;
             }));
-            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `tournament_results.csv`; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `results_${Date.now()}.csv`; a.click();
         }
 
         function renderOfficialReport() {
-            if(!state.teams) return;
+            if(!state.teams || state.teams.length === 0) return;
             let rdHighs = {};
             Object.keys(state.games || {}).forEach(k => {
                 const md = state.games[k], rd = k.split("-")[0], teamAIdx = state.matchups[rd][k.split("-")[1]][0], teamBIdx = state.matchups[rd][k.split("-")[1]][1];
@@ -380,63 +263,37 @@
                     rdHighs[rd] = Math.max(rdHighs[rd], (g.r1/g.s*100)-state.teams[teamAIdx].players[pair[0]].avg, (g.r2/g.s*100)-state.teams[teamBIdx].players[pair[1]].avg);
                 });
             });
-            const s = calcStats();
+            let s = state.teams.map(t=>({n:t.name, w:0, l:0, pts:0, rng:0, sh:0}));
+            Object.keys(state.games || {}).forEach(k => {
+                const ti = state.matchups[k.split('-')[0]][k.split('-')[1]];
+                state.games[k].matches.forEach(g => {
+                    s[ti[0]].pts+=g.p1; s[ti[0]].rng+=g.r1; s[ti[0]].sh+=g.s; s[ti[1]].pts+=g.p2; s[ti[1]].rng+=g.r2; s[ti[1]].sh+=g.s;
+                    if(g.s>=40) { if(g.p1>g.p2) {s[ti[0]].w++; s[ti[1]].l++;} else if(g.p2>g.p1) {s[ti[1]].w++; s[ti[0]].l++;} else {s[ti[0]].w+=.5; s[ti[0]].l+=.5; s[ti[1]].w+=.5; s[ti[1]].l+=.5;}}
+                });
+            });
             let h = `<div class="p-2 text-center uppercase font-black border-b-2">Tournament Standings</div><table class="report-table"><thead><tr><th>Pos</th><th>Team Name</th><th>W</th><th>L</th><th>Pts</th><th>Rgr</th><th>%</th></tr></thead><tbody>`;
             s.sort((a,b)=>b.w-a.w||b.pts-a.pts).forEach((t, i) => h += `<tr><td>${i+1}</td><td>${t.n}</td><td>${fmtDec(t.w)}</td><td>${fmtDec(t.l)}</td><td>${t.pts}</td><td>${t.rng}</td><td>${t.sh>0?(t.rng/t.sh*100).toFixed(1):'0.0'}</td></tr>`);
             h += `</tbody></table><p class="font-bold mt-8 border-b-2 border-black uppercase text-xs">Individual Performance History</p>`;
-            state.teams.forEach(team => {
-                h += `<div class="mt-4 bg-slate-100 p-1 font-black border-l-4 border-slate-900 uppercase text-xs">${team.name}</div>`;
-                team.players.forEach(p => {
-                    let ps = {pts:0, r:0, sh:0, history:[]};
-                    Object.keys(state.games || {}).forEach(k => {
-                        const sub = state.matchups[k.split("-")[0]][k.split("-")[1]].indexOf(state.teams.indexOf(team));
-                        if(sub !== -1) state.games[k].lineup.forEach((pair, gi) => { if(team.players[sub===0?pair[0]:pair[1]].name===p.name) {
+            state.teams.forEach((team, teamIdx) => { h += `<div class="mt-4 bg-slate-100 p-1 font-black border-l-4 border-slate-900 uppercase text-xs">${team.name}</div>`; team.players.forEach((p, playerIdx) => {
+                let ps = {pts:0, r:0, sh:0, history:[]};
+                Object.keys(state.games || {}).forEach(k => { 
+                    const pts = k.split("-").map(Number); const sub = state.matchups[pts[0]][pts[1]].indexOf(teamIdx); 
+                    if(sub !== -1) state.games[k].lineup.forEach((pair, gi) => { 
+                        if((sub===0?pair[0]:pair[1]) === playerIdx) { 
                             const g = state.games[k].matches[gi]; if(g.s === 0) return;
-                            const diff = ( (sub===0?g.r1:g.r2) / g.s * 100 ) - p.avg;
-                            ps.r+=(sub===0?g.r1:g.r2); ps.sh+=g.s; ps.pts+=(sub===0?g.p1:g.p2);
-                            ps.history.push({ rd:k.split("-")[0], opp: state.teams[state.matchups[k.split("-")[0]][k.split("-")[1]][sub===0?1:0]].players[sub===0?pair[1]:pair[0]].name, score: `${sub===0?g.p1:g.p2}/${sub===0?g.p2:g.p1}`, r:(sub===0?g.r1:g.r2), s:g.s, d:diff });
-                        } });
-                    });
-                    h += `<p class="mt-2 font-bold text-xs">${p.name} (Start: ${p.avg}%)</p><table class="report-table"><thead><tr><th>Opponent</th><th>Score</th><th>Rgr</th><th>Sho</th><th>%</th><th>+/- Avg</th></tr></thead><tbody>`;
-                    ps.history.forEach(row => {
-                        const isHigh = row.d >= rdHighs[row.rd] && rdHighs[row.rd] !== -999;
-                        h += `<tr class="${isHigh?'bg-yellow-50':''}"><td>RD ${parseInt(row.rd)+1}: vs ${row.opp}</td><td>${row.score}</td><td>${row.r}</td><td>${row.s}</td><td>${(row.r/row.s*100).toFixed(1)}%</td><td class="font-bold ${row.d>=0?'text-green-600':'text-red-600'}">${(row.d>=0?'+':'')+row.d.toFixed(2)} ${isHigh?'⭐':''}</td></tr>`;
-                    });
-                    const tA = ps.sh > 0 ? (ps.r / ps.sh * 100) : 0, tD = ps.sh > 0 ? (tA - p.avg) : 0;
-                    h += `<tr class="bg-slate-50 font-black"><td>TOTALS</td><td>${ps.pts}</td><td>${ps.r}</td><td>${ps.sh}</td><td>${tA.toFixed(1)}%</td><td class="${tD>=0?'text-green-600':'text-red-600'}">${(tD>=0?'+':'')+tD.toFixed(2)}</td></tr></tbody></table>`;
+                            const diff = ((sub===0?g.r1:g.r2)/g.s*100)-p.avg; ps.r+=(sub===0?g.r1:g.r2); ps.sh+=g.s; ps.pts+=(sub===0?g.p1:g.p2); 
+                            ps.history.push({ rd:pts[0], opp: state.teams[state.matchups[pts[0]][pts[1]][sub===0?1:0]].players[sub===0?pair[1]:pair[0]].name, score: `${sub===0?g.p1:g.p2}/${sub===0?g.p2:g.p1}`, r:(sub===0?g.r1:g.r2), s:g.s, d:diff }); 
+                        } 
+                    }); 
                 });
-            });
-            document.getElementById('report-output').innerHTML = h;
+                h += `<p class="mt-2 font-bold text-xs">${p.name} (Avg: ${p.avg}%)</p><table class="report-table"><thead><tr><th>Opponent</th><th>Score</th><th>Rgr</th><th>Sho</th><th>%</th><th>+/- Avg</th></tr></thead><tbody>`;
+                ps.history.forEach(row => h += `<tr class="${row.d>=rdHighs[row.rd]?'bg-yellow-50':''}"><td>RD ${parseInt(row.rd)+1}: vs ${row.opp}</td><td>${row.score}</td><td>${row.r}</td><td>${row.s}</td><td>${(row.r/row.s*100).toFixed(1)}%</td><td class="font-bold ${row.d>=0?'text-green-600':'text-red-600'}">${(row.d>=0?'+':'')+row.d.toFixed(2)} ${row.d>=rdHighs[row.rd]?'⭐':''}</td></tr>`);
+                const tA = ps.sh > 0 ? (ps.r / ps.sh * 100) : 0, tD = ps.sh > 0 ? (tA - p.avg) : 0; h += `<tr class="bg-slate-50 font-black"><td>TOTALS</td><td>${ps.pts}</td><td>${ps.r}</td><td>${ps.sh}</td><td>${tA.toFixed(1)}%</td><td class="${tD>=0?'text-green-600':'text-red-600'}">${(tD>=0?'+':'')+tD.toFixed(2)}</td></tr></tbody></table>`;
+            }); }); document.getElementById('report-output').innerHTML = h;
         }
 
-        function renderLeaderboard() {
-            const s = calcStats();
-            document.getElementById('lb-rows').innerHTML = s.sort((a,b)=>b.w-a.w||b.pts-a.pts).map((t, i) => `<div class="flex items-center px-4 py-6 border-b border-white/5 text-white font-black"><div class="w-[10%] opacity-40">${i+1}</div><div class="w-[45%] truncate uppercase text-xl">${t.n}</div><div class="w-[15%] text-blue-500 text-center">${fmtDec(t.w)}-${fmtDec(t.l)}</div><div class="w-[15%] text-center">${t.pts}</div><div class="w-[15%] text-right text-blue-400">${t.sh>0?fmtDec(t.rng/t.sh*100):'0'}%</div></div>`).join('');
-            updateTicker();
-        }
-
-        function updateTicker() {
-            let all = []; if(!state.teams) return;
-            state.teams.forEach(team => team.players.forEach(p => {
-                let st = { n:p.name, w:0, l:0, r:0, sh:0 };
-                Object.keys(state.games || {}).forEach(k => {
-                    const sub = state.matchups[k.split("-")[0]][k.split("-")[1]].indexOf(state.teams.indexOf(team));
-                    if(sub !== -1) state.games[k].lineup.forEach((pair, gi) => { if(team.players[sub===0?pair[0]:pair[1]].name===p.name) {
-                        const g = state.games[k].matches[gi]; st.r+=(sub===0?g.r1:g.r2); st.sh+=g.s;
-                        if(g.s>=40) { let mp=sub===0?g.p1:g.p2, op=sub===0?g.p2:g.p1; if(mp>op) st.w++; else if(op>mp) st.l++; else {st.w+=.5; st.l+=.5;}}
-                    } });
-                }); if(st.sh > 0) all.push(st);
-            }));
-            if(!all.length) return; 
-            const p = all[tickerIdx % all.length]; tickerIdx++;
-            document.getElementById('ticker-content').innerHTML = `<div class="flex justify-between items-center h-full px-2 font-black italic"><div><span class="text-white/40 uppercase text-[10px]">Player Spotlight</span><br><span class="text-2xl uppercase tracking-tighter">${p.n}</span></div><div class="flex gap-6"><div><p class="text-white/40 text-[10px]">Record</p><p class="text-2xl">${fmtDec(p.w)}-${fmtDec(p.l)}</p></div><div><p class="text-white/40 text-[10px]">Rgr %</p><p class="text-2xl">${fmtDec(p.r/p.sh*100)}%</p></div></div></div>`;
-        }
-
-        function goto(id) { document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active')); document.getElementById('view-'+id).classList.add('active'); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active-tab')); document.getElementById('tab-'+id).classList.add('active-tab'); renderUI(); }
-        function toggleFS(id) { const el = document.getElementById(id); if(!document.fullscreenElement) el.requestFullscreen(); else document.exitFullscreen(); }
-        function systemWipe() { if(confirm("Permanently Erase ALL tournament data?")) { dbRef.remove(); location.reload(); } }
-        
-        setInterval(updateTicker, 6000);
+        function goto(id) { nav.currentView=id; document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active')); document.getElementById('view-'+id).classList.add('active'); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active-tab')); document.getElementById('tab-'+id).classList.add('active-tab'); renderUI(); }
+        function systemWipe() { if(confirm("Permanently wipe tournament data?")) { dbRef.remove(); location.reload(); } }
     </script>
 </body>
 </html>
