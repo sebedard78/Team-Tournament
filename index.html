@@ -96,7 +96,10 @@
     <!-- SCORER VIEW -->
     <div id="view-scorer" class="hidden fixed inset-0 bg-white z-[500] flex flex-col h-screen w-screen overflow-hidden no-print">
         <header class="bg-slate-900 text-white p-2 flex justify-between items-center shrink-0 border-b border-slate-800">
-            <button onclick="exitScorer()" class="text-[9px] font-black bg-slate-800 px-3 py-1.5 rounded uppercase">Exit</button>
+            <div class="flex gap-1">
+                <button onclick="exitScorer()" class="text-[9px] font-black bg-slate-800 px-3 py-1.5 rounded uppercase">Exit</button>
+                <button onclick="openManualModal()" class="text-[9px] font-black bg-slate-600 px-3 py-1.5 rounded uppercase">Manual</button>
+            </div>
             <div id="sc-title" class="text-[8px] font-black uppercase text-blue-400 text-center truncate"></div>
             <button id="sc-print-btn" onclick="printMatchCard()" class="text-[9px] font-black bg-blue-600 px-3 py-1.5 rounded uppercase shadow-lg transition-opacity">Print Card</button>
         </header>
@@ -133,6 +136,52 @@
 
     <!-- LINEUP MODAL -->
     <div id="modal-lineup" class="hidden fixed inset-0 bg-slate-900/95 z-[9999] flex items-center justify-center p-4"><div class="bg-white rounded-3xl p-5 w-full max-w-sm"><h2 class="text-xl font-black text-blue-600 uppercase italic mb-6 text-center border-b pb-2">Assign Lineup</h2><div id="lineup-form" class="space-y-4"></div><button onclick="saveLineupAndGo()" class="w-full mt-8 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase">Start Scoring</button></div></div>
+
+    <!-- MANUAL ENTRY MODAL -->
+    <div id="modal-manual" class="hidden fixed inset-0 bg-slate-900/95 z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <h2 class="text-xl font-black text-slate-800 uppercase italic mb-6 text-center border-b pb-2">Manual Totals</h2>
+            <div class="space-y-6">
+                <!-- Player 1 Inputs -->
+                <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                    <p id="man-p1-name" class="text-[11px] font-black text-blue-700 uppercase mb-3 truncate"></p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-blue-500 block mb-1">Total Score</label>
+                            <input type="number" id="man-p1-s" class="w-full p-3 border-2 border-blue-200 rounded-xl font-black text-center text-lg focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-blue-500 block mb-1">Total Ringers</label>
+                            <input type="number" id="man-p1-r" class="w-full p-3 border-2 border-blue-200 rounded-xl font-black text-center text-lg focus:border-blue-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+                <!-- Player 2 Inputs -->
+                <div class="bg-red-50 p-4 rounded-2xl border border-red-100">
+                    <p id="man-p2-name" class="text-[11px] font-black text-red-700 uppercase mb-3 truncate"></p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-red-500 block mb-1">Total Score</label>
+                            <input type="number" id="man-p2-s" class="w-full p-3 border-2 border-red-200 rounded-xl font-black text-center text-lg focus:border-red-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-black uppercase text-red-500 block mb-1">Total Ringers</label>
+                            <input type="number" id="man-p2-r" class="w-full p-3 border-2 border-red-200 rounded-xl font-black text-center text-lg focus:border-red-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+                <!-- Shoes Input -->
+                <div class="px-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase block mb-1 text-center">Total Shoes Thrown</label>
+                    <input type="number" id="man-shoes" value="40" class="w-full p-3 border rounded-xl font-black text-center bg-slate-50 text-slate-700">
+                </div>
+            </div>
+            <div class="flex gap-3 mt-8">
+                <button onclick="closeManualModal()" class="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs">Cancel</button>
+                <button onclick="saveManualEntry()" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg">Update Results</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const firebaseConfig = { apiKey: "AIzaSyC66Kkum1zo-tXtdFDDzjTRryYQODXbfkA", authDomain: "loonpond-4f41b.firebaseapp.com", databaseURL: "https://loonpond-4f41b-default-rtdb.firebaseio.com", projectId: "loonpond-4f41b", storageBucket: "loonpond-4f41b.firebasestorage.app", messagingSenderId: "285450331741", appId: "1:285450331741:web:0ef3d97f1d4149784ecfb4", measurementId: "G-V09W2KSXEK" };
@@ -195,6 +244,35 @@
             if(g.s >= 40) { document.getElementById('sc-shoe-label').innerText = "COMPLETE"; btn.classList.remove('opacity-30'); }
             else { document.getElementById('sc-shoe-label').innerText = `${g.s}/40 SHOES`; btn.classList.add('opacity-30'); }
             const sEl = document.getElementById('sc-history-scroll'); if(sEl) sEl.scrollTo({left: sEl.scrollWidth, behavior: 'smooth'});
+        }
+
+        // --- MANUAL ENTRY FUNCTIONS ---
+        function openManualModal() {
+            const md = state.games?.[nav.activeMatchKey]; if(!md) return;
+            const g = md.matches[nav.activeCourtIdx], parts = nav.activeMatchKey.split('-');
+            const t1 = state.teams[state.matchups[parts[0]][parts[1]][0]], t2 = state.teams[state.matchups[parts[0]][parts[1]][1]];
+            document.getElementById('man-p1-name').innerText = t1.players[md.lineup[nav.activeCourtIdx][0]].name;
+            document.getElementById('man-p2-name').innerText = t2.players[md.lineup[nav.activeCourtIdx][1]].name;
+            document.getElementById('man-p1-s').value = g.p1;
+            document.getElementById('man-p1-r').value = g.r1;
+            document.getElementById('man-p2-s').value = g.p2;
+            document.getElementById('man-p2-r').value = g.r2;
+            document.getElementById('man-shoes').value = g.s || 40;
+            document.getElementById('modal-manual').classList.remove('hidden');
+        }
+        function closeManualModal() { document.getElementById('modal-manual').classList.add('hidden'); }
+        function saveManualEntry() {
+            const md = state.games?.[nav.activeMatchKey]; if(!md) return;
+            const g = md.matches[nav.activeCourtIdx];
+            g.p1 = parseInt(document.getElementById('man-p1-s').value) || 0;
+            g.r1 = parseInt(document.getElementById('man-p1-r').value) || 0;
+            g.p2 = parseInt(document.getElementById('man-p2-s').value) || 0;
+            g.r2 = parseInt(document.getElementById('man-p2-r').value) || 0;
+            g.s = parseInt(document.getElementById('man-shoes').value) || 0;
+            g.h = []; 
+            persist();
+            closeManualModal();
+            renderScorerUI();
         }
 
         function eCommit(code) { 
